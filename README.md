@@ -1,7 +1,4 @@
 # 🛒 Smart Checkout System
-
-# claude link --->  https://claude.ai/chat/f0b75f70-e196-45df-a175-a8b6af88841a
-
 A production-grade self-checkout system enabling customers to scan products, pay via UPI, and exit stores using secure time-bound QR codes.
 
 ## 🎯 Core Features
@@ -214,12 +211,12 @@ http://localhost:8000/api/docs
 
 **Backend (.env):**
 ```env
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/smart_checkout
+DATABASE_URL=postgresql://username:password@localhost:5432/db_name
 JWT_SECRET=your-jwt-secret
 QR_SECRET=your-qr-secret
 PAYMENT_KEY=razorpay_key
 PAYMENT_SECRET=razorpay_secret
-N8N_WEBHOOK_URL=http://localhost:5678/webhook/payment-success
+N8N_WEBHOOK_URL=http://localhost:5678/webhook/
 ```
 
 **Frontend (.env):**
