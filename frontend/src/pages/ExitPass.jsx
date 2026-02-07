@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Download, ArrowLeft } from 'lucide-react';
+import { Download, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { QRCodeSVG } from 'qrcode.react';
 import { exitQRAPI, ordersAPI } from '../services/api';
@@ -24,7 +24,7 @@ export default function ExitPass() {
         const now = Date.now();
         const remaining = Math.max(0, Math.floor((expiresAt - now) / 1000));
         setTimeLeft(remaining);
-        
+
         if (remaining === 0) {
           clearInterval(interval);
           toast.error('QR code expired');

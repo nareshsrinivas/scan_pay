@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { CreditCard } from 'lucide-react';
+import { CreditCard, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ordersAPI, paymentsAPI } from '../services/api';
 
@@ -14,6 +14,9 @@ export default function Checkout() {
   useEffect(() => {
     if (orderUuid) {
       loadOrder();
+    } else {
+      toast.error('No order found');
+      navigate('/cart');
     }
   }, [orderUuid]);
 
@@ -30,44 +33,75 @@ export default function Checkout() {
   const handlePayment = async () => {
     setLoading(true);
     try {
-      // Initiate payment
-      const response = await paymentsAPI.initiate(orderUuid, 'razorpay');
-      
-      // Simulate successful payment webhook
-      setTimeout(async () => {
-        await paymentsAPI.webhook({
-          provider_reference: `txn_${Date.now()}`,
-          order_uuid: orderUuid,
-          amount: order.total_amount,
-          status: 'success',
-          transaction_id: `TXN-${Date.now()}`,
-          payment_method: 'upi'
-        });
-        
-        navigate(`/payment-success/${orderUuid}`);
-      }, 2000);
+      // Step 1: Initiate payment
+      toast.loading('Initiating payment...', { id: 'payment' });
+      console.log('Initiating payment for order:', orderUuid);
+
+      const response = await paymentsAPI.initiate(orderUuid, 'upi');
+      console.log('Payment initiated:', response.data);
+
+      // Step 2: Simulate payment processing
+      toast.loading('Processing payment...', { id: 'payment' });
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Step 3: Send webhook to mark payment as successful
+      console.log('Sending payment webhook...');
+      const webhookResponse = await paymentsAPI.webhook({
+        order_uuid: orderUuid,
+        status: 'success',
+        provider_reference: `txn_${Date.now()}`,
+        transaction_id: `TXN-${Date.now()}`,
+        amount: order.total_amount,
+        payment_method: 'upi'
+      });
+      console.log('Webhook response:', webhookResponse.data);
+
+      // Step 4: Wait for database to update
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      toast.success('Payment successful!', { id: 'payment' });
+
+      // Step 5: Navigate to payment success page
+      navigate(`/payment-success/${orderUuid}`);
+
     } catch (error) {
-      toast.error('Payment failed');
+      console.error('Payment error:', error);
+      toast.error(error.response?.data?.detail || 'Payment failed. Please try again.', { id: 'payment' });
       setLoading(false);
     }
   };
 
   if (!order) {
-    return <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
-    </div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4">
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <button
+            onClick={() => navigate('/cart')}
+            className="flex items-center text-gray-600 hover:text-gray-900"
+          >
+            <ArrowLeft className="w-5 h-5 mr-2" />
+            Back to Cart
+          </button>
+        </div>
+      </div>
+
+      <div className="max-w-4xl mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold mb-8">Checkout</h1>
 
         <div className="grid md:grid-cols-2 gap-8">
           <div className="bg-white rounded-xl p-6">
             <h2 className="text-xl font-bold mb-4">Order Items</h2>
             <div className="space-y-3">
-              {order.items.map((item) => (
+              {order.items && order.items.map((item) => (
                 <div key={item.order_item_uuid} className="flex justify-between py-2 border-b">
                   <div>
                     <div className="font-semibold">{item.product_name}</div>
@@ -81,7 +115,7 @@ export default function Checkout() {
 
           <div className="bg-white rounded-xl p-6">
             <h2 className="text-xl font-bold mb-4">Payment Summary</h2>
-            
+
             <div className="space-y-3 mb-6">
               <div className="flex justify-between">
                 <span>Subtotal</span>
@@ -107,7 +141,7 @@ export default function Checkout() {
             </button>
 
             <p className="text-xs text-gray-500 text-center mt-4">
-              Powered by FastAPI & n8n Automation
+              Demo Payment Mode - Auto-approved
             </p>
           </div>
         </div>

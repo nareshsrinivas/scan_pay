@@ -75,7 +75,7 @@ export default function Cart() {
       <div className="max-w-4xl mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold mb-8">Your Cart</h1>
 
-        {cart.items.length === 0 ? (
+        {(!cart.items || cart.items.length === 0) ? (
           <div className="bg-white rounded-xl p-12 text-center">
             <p className="text-gray-500 text-lg">Your cart is empty</p>
             <button onClick={() => navigate('/')} className="btn-primary mt-4">
@@ -90,7 +90,7 @@ export default function Cart() {
                   <div className="flex-1">
                     <h3 className="font-bold text-lg">{item.product_name}</h3>
                     <p className="text-sm text-gray-600">₹{item.product_price} each</p>
-                    
+
                     <div className="flex items-center space-x-2 mt-2">
                       <button
                         onClick={() => handleUpdateQuantity(item.cart_uuid, item.quantity - 1)}
@@ -126,7 +126,7 @@ export default function Cart() {
             <div className="md:col-span-1">
               <div className="bg-white rounded-xl p-6 sticky top-4">
                 <h2 className="text-xl font-bold mb-4">Order Summary</h2>
-                
+
                 <div className="space-y-3 mb-4">
                   <div className="flex justify-between">
                     <span>Subtotal</span>

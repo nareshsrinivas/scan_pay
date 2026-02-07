@@ -1,29 +1,62 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { exitQRAPI } from '../services/api';
+import { exitQRAPI, ordersAPI } from '../services/api';
 
 export default function PaymentSuccess() {
   const { orderUuid } = useParams();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [retryCount, setRetryCount] = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
-    generateExitQR();
-  }, [orderUuid]);
+    if (orderUuid) {
+      generateExitQR();
+    }
+  }, [orderUuid, retryCount]);
 
   const generateExitQR = async () => {
     try {
-      await exitQRAPI.generate(orderUuid);
-      setLoading(false);
-      setTimeout(() => {
-        navigate(`/exit-pass/${orderUuid}`);
-      }, 3000);
-    } catch (error) {
-      toast.error('Failed to generate exit QR');
+      setLoading(true);
+      setError(null);
+
+      // Wait a bit for order status to update in database
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      console.log('Generating exit QR for order:', orderUuid);
+      const response = await exitQRAPI.generate(orderUuid);
+
+      if (response.data) {
+        toast.success('Exit QR generated!');
+        // Navigate to exit pass
+        setTimeout(() => {
+          navigate(`/exit-pass/${orderUuid}`);
+        }, 1500);
+      }
+    } catch (err) {
+      console.error('Exit QR generation error:', err);
+      const errorMsg = err.response?.data?.detail || 'Failed to generate exit QR';
+      setError(errorMsg);
+
+      // If it's an order status issue, we can retry
+      if (retryCount < 3 && errorMsg.includes('paid')) {
+        toast.error(`Waiting for payment confirmation... (Retry ${retryCount + 1}/3)`);
+      } else {
+        toast.error(errorMsg);
+      }
+    } finally {
       setLoading(false);
     }
+  };
+
+  const handleRetry = () => {
+    setRetryCount(prev => prev + 1);
+  };
+
+  const handleManualNavigate = () => {
+    navigate(`/exit-pass/${orderUuid}`);
   };
 
   return (
@@ -45,12 +78,38 @@ export default function PaymentSuccess() {
           <div className="py-8">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto" />
             <p className="text-sm text-gray-600 mt-4">Generating exit QR code...</p>
+            <p className="text-xs text-gray-400 mt-2">This may take a few seconds</p>
+          </div>
+        ) : error ? (
+          <div className="py-4">
+            <p className="text-red-600 mb-4">{error}</p>
+            <div className="space-y-3">
+              <button
+                onClick={handleRetry}
+                className="btn-primary w-full flex items-center justify-center gap-2"
+              >
+                <RefreshCw className="w-5 h-5" />
+                Try Again
+              </button>
+              <button
+                onClick={handleManualNavigate}
+                className="btn-secondary w-full"
+              >
+                Continue Anyway
+              </button>
+            </div>
           </div>
         ) : (
           <div className="py-4">
-            <p className="text-gray-700">
-              Use the code below to exit the store.
+            <p className="text-gray-700 mb-4">
+              Exit QR generated! Redirecting...
             </p>
+            <button
+              onClick={handleManualNavigate}
+              className="btn-primary w-full"
+            >
+              View Exit Pass
+            </button>
           </div>
         )}
       </div>

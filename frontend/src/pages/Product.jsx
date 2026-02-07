@@ -30,7 +30,7 @@ export default function Product() {
     try {
       await cartAPI.add(product.product_uuid, quantity);
       toast.success(`Added ${quantity} item(s) to cart`);
-      navigate('/');
+      navigate('/cart');
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to add to cart');
     } finally {
@@ -69,7 +69,7 @@ export default function Product() {
             <div className="md:w-1/2 p-8">
               <h1 className="text-3xl font-bold mb-2">{product.name}</h1>
               <p className="text-gray-600 mb-4">SKU: {product.sku}</p>
-              
+
               <div className="text-4xl font-bold text-primary mb-6">
                 ₹{product.price}
               </div>

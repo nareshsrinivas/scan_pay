@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { ShoppingBag, Zap, User } from 'lucide-react';
@@ -7,16 +7,24 @@ import { cartAPI } from '../services/api';
 import { useCartStore, useAuthStore } from '../store';
 
 export default function Scan() {
-  const [scanning, setScanning] = useState(false);
   const [scannedItems, setScannedItems] = useState(0);
   const navigate = useNavigate();
   const { cart, setCart } = useCartStore();
   const { user, logout } = useAuthStore();
+  const scannerRef = useRef(null);
 
   useEffect(() => {
     loadCart();
-    initializeScanner();
-    return () => cleanupScanner();
+
+    // Initialize scanner with delay to ensure DOM is ready
+    const timer = setTimeout(() => {
+      initializeScanner();
+    }, 100);
+
+    return () => {
+      clearTimeout(timer);
+      cleanupScanner();
+    };
   }, []);
 
   const loadCart = async () => {
@@ -30,35 +38,55 @@ export default function Scan() {
   };
 
   const initializeScanner = () => {
-    const scanner = new Html5QrcodeScanner('qr-reader', {
-      fps: 10,
-      qrbox: { width: 250, height: 250 },
-    });
+    const scannerElement = document.getElementById('qr-reader');
+    if (!scannerElement) return;
 
-    scanner.render(onScanSuccess, onScanError);
-    setScanning(true);
-  };
-
-  const cleanupScanner = () => {
     try {
-      Html5QrcodeScanner.clear('qr-reader');
-    } catch (error) {}
-  };
+      scannerRef.current = new Html5QrcodeScanner('qr-reader', {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        rememberLastUsedCamera: true,
+        supportedScanTypes: []
+      });
 
-  const onScanSuccess = async (decodedText) => {
-    try {
-      if (decodedText.startsWith('PRODUCT:')) {
-        const qrCode = decodedText;
-        navigate(`/product/${qrCode}`);
-      } else {
-        toast.error('Invalid QR code');
-      }
+      scannerRef.current.render(onScanSuccess, onScanError);
     } catch (error) {
-      toast.error('Failed to scan product');
+      console.error('Scanner init error:', error);
     }
   };
 
-  const onScanError = () => {};
+  const cleanupScanner = () => {
+    if (scannerRef.current) {
+      try {
+        scannerRef.current.clear().catch(() => { });
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+      scannerRef.current = null;
+    }
+  };
+
+  const onScanSuccess = async (decodedText) => {
+    // Stop scanner to prevent multiple scans
+    cleanupScanner();
+
+    try {
+      if (decodedText.startsWith('PRODUCT:')) {
+        const qrCode = decodedText;
+        toast.success('Product found!');
+        navigate(`/product/${encodeURIComponent(qrCode)}`);
+      } else {
+        toast.error('Invalid QR code format');
+        // Reinitialize scanner after error
+        setTimeout(() => initializeScanner(), 1000);
+      }
+    } catch (error) {
+      toast.error('Failed to scan product');
+      setTimeout(() => initializeScanner(), 1000);
+    }
+  };
+
+  const onScanError = () => { };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -129,7 +157,7 @@ export default function Scan() {
           <div className="bg-white rounded-xl shadow-sm p-6">
             <h2 className="text-xl font-bold mb-4">Your Shopping Cart</h2>
 
-            {cart && cart.items.length > 0 ? (
+            {cart && cart.items && cart.items.length > 0 ? (
               <div className="space-y-4">
                 {cart.items.map((item) => (
                   <div

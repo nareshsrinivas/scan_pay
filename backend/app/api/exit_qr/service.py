@@ -25,8 +25,8 @@ class ExitQRService:
                 detail="Order not found"
             )
         
-        # Check if order is paid
-        if order.status != "paid":
+        # Check if order is paid or verified (verified means QR was already generated)
+        if order.status not in ["paid", "verified"]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Order must be paid to generate exit QR. Current status: {order.status}"

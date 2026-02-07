@@ -1,57 +1,100 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
-import { CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle, Keyboard } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { exitQRAPI } from '../services/api';
 
 export default function Verify() {
   const [verificationResult, setVerificationResult] = useState(null);
   const [scanning, setScanning] = useState(true);
+  const [manualToken, setManualToken] = useState('');
+  const [showManualInput, setShowManualInput] = useState(false);
+  const scannerRef = useRef(null);
 
   useEffect(() => {
-    initializeScanner();
-    return () => cleanupScanner();
+    const timer = setTimeout(() => {
+      initializeScanner();
+    }, 100);
+
+    return () => {
+      clearTimeout(timer);
+      cleanupScanner();
+    };
   }, []);
 
   const initializeScanner = () => {
-    const scanner = new Html5QrcodeScanner('qr-scanner', {
-      fps: 10,
-      qrbox: { width: 300, height: 300 },
-    });
+    const scannerElement = document.getElementById('qr-scanner');
+    if (!scannerElement || !scanning) return;
 
-    scanner.render(onScanSuccess, onScanError);
-  };
-
-  const cleanupScanner = () => {
     try {
-      Html5QrcodeScanner.clear('qr-scanner');
-    } catch (error) {}
-  };
+      scannerRef.current = new Html5QrcodeScanner('qr-scanner', {
+        fps: 10,
+        qrbox: { width: 300, height: 300 },
+        rememberLastUsedCamera: true
+      });
 
-  const onScanSuccess = async (decodedText) => {
-    setScanning(false);
-    try {
-      const response = await exitQRAPI.verify(decodedText);
-      setVerificationResult(response.data);
-      
-      if (response.data.valid) {
-        toast.success('Authorization successful!');
-      } else {
-        toast.error(response.data.message);
-      }
-
-      setTimeout(() => {
-        setVerificationResult(null);
-        setScanning(true);
-        initializeScanner();
-      }, 5000);
+      scannerRef.current.render(onScanSuccess, onScanError);
     } catch (error) {
-      toast.error('Verification failed');
-      setScanning(true);
+      console.error('Scanner init error:', error);
     }
   };
 
-  const onScanError = () => {};
+  const cleanupScanner = () => {
+    if (scannerRef.current) {
+      try {
+        scannerRef.current.clear().catch(() => { });
+      } catch (error) { }
+      scannerRef.current = null;
+    }
+  };
+
+  const onScanSuccess = async (decodedText) => {
+    cleanupScanner();
+    setScanning(false);
+    await verifyToken(decodedText);
+  };
+
+  const onScanError = () => { };
+
+  const verifyToken = async (token) => {
+    try {
+      console.log('Verifying token:', token);
+      const response = await exitQRAPI.verify(token);
+      setVerificationResult(response.data);
+
+      if (response.data.valid) {
+        toast.success('Authorization successful!');
+      } else {
+        toast.error(response.data.message || 'Verification failed');
+      }
+    } catch (error) {
+      console.error('Verification error:', error);
+      const errorMsg = error.response?.data?.detail || 'Verification failed';
+      toast.error(errorMsg);
+      setVerificationResult({
+        valid: false,
+        status: 'error',
+        message: errorMsg
+      });
+    }
+
+    // Reset after 5 seconds
+    setTimeout(() => {
+      setVerificationResult(null);
+      setScanning(true);
+      setManualToken('');
+      setTimeout(() => initializeScanner(), 100);
+    }, 5000);
+  };
+
+  const handleManualVerify = (e) => {
+    e.preventDefault();
+    if (manualToken.trim()) {
+      cleanupScanner();
+      setScanning(false);
+      verifyToken(manualToken.trim());
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-900 to-green-700">
@@ -69,17 +112,42 @@ export default function Verify() {
 
         <div className="max-w-2xl mx-auto">
           {scanning && !verificationResult && (
-            <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-              <div id="qr-scanner" className="w-full" />
+            <div className="space-y-4">
+              <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+                <div id="qr-scanner" className="w-full" />
+              </div>
+
+              {/* Manual Token Input Toggle */}
+              <button
+                onClick={() => setShowManualInput(!showManualInput)}
+                className="w-full flex items-center justify-center gap-2 text-white/80 hover:text-white py-2"
+              >
+                <Keyboard className="w-5 h-5" />
+                <span>Enter token manually</span>
+              </button>
+
+              {showManualInput && (
+                <form onSubmit={handleManualVerify} className="bg-white rounded-xl p-4">
+                  <input
+                    type="text"
+                    value={manualToken}
+                    onChange={(e) => setManualToken(e.target.value)}
+                    placeholder="Paste exit QR token here..."
+                    className="w-full border rounded-lg px-4 py-3 mb-3"
+                  />
+                  <button type="submit" className="btn-primary w-full">
+                    Verify Token
+                  </button>
+                </form>
+              )}
             </div>
           )}
 
           {verificationResult && (
-            <div className={`bg-white rounded-2xl shadow-2xl p-8 text-center ${
-              verificationResult.valid 
-                ? 'border-8 border-green-500' 
+            <div className={`bg-white rounded-2xl shadow-2xl p-8 text-center ${verificationResult.valid
+                ? 'border-8 border-green-500'
                 : 'border-8 border-red-500'
-            }`}>
+              }`}>
               {verificationResult.valid ? (
                 <>
                   <div className="mb-6">
@@ -98,26 +166,26 @@ export default function Verify() {
                     <div className="grid grid-cols-2 gap-4 text-left">
                       <div>
                         <p className="text-sm text-gray-600">Customer Name</p>
-                        <p className="font-bold text-lg">{verificationResult.user_name}</p>
+                        <p className="font-bold text-lg">{verificationResult.user_name || 'Customer'}</p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-600">Order #</p>
-                        <p className="font-bold text-lg">{verificationResult.order_number}</p>
+                        <p className="font-bold text-lg">{verificationResult.order_number || 'N/A'}</p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-600">Items</p>
-                        <p className="font-bold text-lg">{verificationResult.items_count}</p>
+                        <p className="font-bold text-lg">{verificationResult.items_count || 0}</p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-600">Amount Paid</p>
                         <p className="font-bold text-lg text-green-600">
-                          ₹{verificationResult.total_amount}
+                          ₹{verificationResult.total_amount || 0}
                         </p>
                       </div>
                     </div>
                   </div>
 
-                  {verificationResult.items && (
+                  {verificationResult.items && verificationResult.items.length > 0 && (
                     <div className="bg-gray-50 rounded-xl p-4">
                       <p className="font-semibold mb-2">Order Summary</p>
                       <div className="space-y-1 text-sm">
@@ -151,11 +219,11 @@ export default function Verify() {
 
                   <div className="bg-red-50 rounded-xl p-6">
                     <p className="text-gray-700">
-                      {verificationResult.status === 'expired' 
+                      {verificationResult.status === 'expired'
                         ? 'This QR code has expired. Please generate a new one.'
                         : verificationResult.status === 'already_used'
-                        ? 'This QR code has already been used.'
-                        : 'Invalid QR code. Please contact staff for assistance.'}
+                          ? 'This QR code has already been used.'
+                          : 'Invalid QR code. Please contact staff for assistance.'}
                     </p>
                   </div>
                 </>

@@ -35,10 +35,10 @@ api.interceptors.response.use(
 export const authAPI = {
   guestLogin: (phoneNumber, deviceId) =>
     api.post('/auth/guest-login', { phone_number: phoneNumber, device_id: deviceId }),
-  
+
   getProfile: () =>
     api.get('/auth/profile'),
-  
+
   logout: () =>
     api.post('/auth/logout'),
 };
@@ -47,10 +47,10 @@ export const authAPI = {
 export const productsAPI = {
   getAll: (params) =>
     api.get('/products', { params }),
-  
+
   getById: (uuid) =>
     api.get(`/products/${uuid}`),
-  
+
   getByQR: (qrCode) =>
     api.get(`/products/qr/${qrCode}`),
 };
@@ -59,16 +59,16 @@ export const productsAPI = {
 export const cartAPI = {
   add: (productUuid, quantity) =>
     api.post('/cart/add', { product_uuid: productUuid, quantity }),
-  
+
   get: () =>
     api.get('/cart'),
-  
+
   update: (cartUuid, quantity) =>
     api.put(`/cart/${cartUuid}`, { quantity }),
-  
+
   remove: (cartUuid) =>
     api.delete(`/cart/${cartUuid}`),
-  
+
   clear: () =>
     api.delete('/cart'),
 };
@@ -77,22 +77,22 @@ export const cartAPI = {
 export const ordersAPI = {
   create: () =>
     api.post('/orders/create'),
-  
+
   getById: (uuid) =>
     api.get(`/orders/${uuid}`),
-  
+
   getAll: () =>
     api.get('/orders'),
 };
 
 // Payments API
 export const paymentsAPI = {
-  initiate: (orderUuid, paymentProvider) =>
-    api.post('/payments/initiate', { order_uuid: orderUuid, payment_provider: paymentProvider }),
-  
+  initiate: (orderUuid, paymentMethod = 'upi') =>
+    api.post('/payments/initiate', { order_uuid: orderUuid, payment_method: paymentMethod }),
+
   getStatus: (paymentUuid) =>
     api.get(`/payments/${paymentUuid}`),
-  
+
   webhook: (data) =>
     api.post('/payments/webhook', data),
 };
@@ -101,7 +101,7 @@ export const paymentsAPI = {
 export const exitQRAPI = {
   generate: (orderUuid) =>
     api.post('/exit-qr/generate', { order_uuid: orderUuid }),
-  
+
   verify: (qrToken) =>
     api.post('/exit-qr/verify', { qr_token: qrToken }),
 };
