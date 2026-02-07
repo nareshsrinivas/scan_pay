@@ -1,0 +1,243 @@
+{
+  "name": "Payment Success Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "payment-success",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-payment-success",
+      "name": "Webhook - Payment Success",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"status\"]}}",
+              "operation": "equal",
+              "value2": "success"
+            }
+          ]
+        }
+      },
+      "id": "if-payment-success",
+      "name": "IF Payment Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE orders SET status = 'paid', updated_at = NOW() WHERE order_uuid = '{{$json[\"order_uuid\"]}}'",
+        "options": {}
+      },
+      "id": "update-order-status",
+      "name": "Update Order Status",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        650,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8000/api/v1/exit-qr/generate",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"order_uuid\": \"{{$json[\"order_uuid\"]}}\"}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "generate-exit-qr",
+      "name": "Generate Exit QR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        850,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE products p SET stock = stock - oi.quantity FROM order_items oi WHERE oi.order_uuid = '{{$json[\"order_uuid\"]}}' AND p.product_uuid = oi.product_uuid",
+        "options": {}
+      },
+      "id": "update-inventory",
+      "name": "Update Inventory",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        1050,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO analytics_events (event_type, event_data, created_at) VALUES ('payment_success', '{{JSON.stringify($json)}}', NOW())",
+        "options": {}
+      },
+      "id": "log-analytics",
+      "name": "Log Analytics Event",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        1250,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"success\": true, \"message\": \"Payment processed successfully\"}",
+        "options": {}
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"success\": false, \"message\": \"Payment was not successful\"}",
+        "options": {}
+      },
+      "id": "respond-failure",
+      "name": "Respond Failure",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        650,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook - Payment Success": {
+      "main": [
+        [
+          {
+            "node": "IF Payment Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Payment Success": {
+      "main": [
+        [
+          {
+            "node": "Update Order Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Order Status": {
+      "main": [
+        [
+          {
+            "node": "Generate Exit QR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Exit QR": {
+      "main": [
+        [
+          {
+            "node": "Update Inventory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Inventory": {
+      "main": [
+        [
+          {
+            "node": "Log Analytics Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Analytics Event": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "timezone": "Asia/Kolkata"
+  },
+  "versionId": "2"
+}

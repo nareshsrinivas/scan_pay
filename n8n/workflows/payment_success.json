@@ -1,0 +1,44 @@
+{
+  "name": "Payment Success Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "payment-success",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO payment_logs (order_uuid, transaction_id, amount, created_at) VALUES ('{{$json[\"order_uuid\"]}}', '{{$json[\"transaction_id\"]}}', {{$json[\"amount\"]}}, NOW())"
+      },
+      "name": "Log to Database",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => ({\n  json: {\n    success: true,\n    message: 'Payment logged successfully'\n  }\n}));"
+      },
+      "name": "Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [650, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Log to Database", "type": "main", "index": 0 }]]
+    },
+    "Log to Database": {
+      "main": [[{ "node": "Response", "type": "main", "index": 0 }]]
+    }
+  }
+}
