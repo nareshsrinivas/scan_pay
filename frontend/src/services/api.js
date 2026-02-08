@@ -112,4 +112,17 @@ export const staffAPI = {
     api.post('/staff/login', { email, password }),
 };
 
+// AI Detection API
+export const aiAPI = {
+  health: () =>
+    api.get('/ai/health'),
+
+  detectProducts: (imageBase64, orderUuid, expectedProducts) =>
+    api.post('/ai/detect-products', {
+      image: imageBase64,
+      order_uuid: orderUuid,
+      expected_products: expectedProducts
+    }),
+};
+
 export default api;

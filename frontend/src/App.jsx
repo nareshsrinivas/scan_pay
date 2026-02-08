@@ -12,6 +12,7 @@ import PaymentSuccess from './pages/PaymentSuccess';
 import ExitPass from './pages/ExitPass';
 import Verify from './pages/Verify';
 import StaffLogin from './pages/StaffLogin';
+import AIDetection from './pages/AIDetection';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -26,44 +27,49 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/staff-login" element={<StaffLogin />} />
-        
+
         <Route path="/" element={
           <ProtectedRoute>
             <Scan />
           </ProtectedRoute>
         } />
-        
+
         <Route path="/product/:uuid" element={
           <ProtectedRoute>
             <Product />
           </ProtectedRoute>
         } />
-        
+
         <Route path="/cart" element={
           <ProtectedRoute>
             <Cart />
           </ProtectedRoute>
         } />
-        
+
         <Route path="/checkout" element={
           <ProtectedRoute>
             <Checkout />
           </ProtectedRoute>
         } />
-        
+
         <Route path="/payment-success/:orderUuid" element={
           <ProtectedRoute>
             <PaymentSuccess />
           </ProtectedRoute>
         } />
-        
+
         <Route path="/exit-pass/:orderUuid" element={
           <ProtectedRoute>
             <ExitPass />
           </ProtectedRoute>
         } />
-        
+
         <Route path="/verify" element={<Verify />} />
+        <Route path="/ai-detection" element={
+          <ProtectedRoute>
+            <AIDetection />
+          </ProtectedRoute>
+        } />
       </Routes>
     </BrowserRouter>
   );

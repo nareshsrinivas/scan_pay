@@ -12,6 +12,7 @@ from app.api.orders.routes import router as orders_router
 from app.api.payments.routes import router as payments_router
 from app.api.exit_qr.routes import router as exit_qr_router
 from app.api.staff.routes import router as staff_router
+from app.api.ai.routes import router as ai_router
 
 # Create FastAPI app
 app = FastAPI(
@@ -39,6 +40,7 @@ app.include_router(orders_router, prefix="/api/v1")
 app.include_router(payments_router, prefix="/api/v1")
 app.include_router(exit_qr_router, prefix="/api/v1")
 app.include_router(staff_router, prefix="/api/v1")
+app.include_router(ai_router, prefix="/api/v1")
 
 # Global exception handler
 @app.exception_handler(Exception)
