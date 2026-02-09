@@ -1,6 +1,11 @@
 # 🛒 Smart Checkout System
 A production-grade self-checkout system enabling customers to scan products, pay via UPI, and exit stores using secure time-bound QR codes.
 
+# use this urls for n8n service 
+
+# --> Old: http://localhost:8000/api/v1/exit-qr/internal/generate
+# ---> New: http://host.docker.internal:8000/api/v1/exit-qr/internal/generate
+
 ## 🎯 Core Features
 
 - **QR Code Scanning**: Scan product QR codes to add items to cart

@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     # n8n
     N8N_WEBHOOK_URL: str = ""
     N8N_ENABLED: bool = True
+    INTERNAL_API_SECRET: str = "n8n-internal-secret-key"
     
     # AI Service
     AI_SERVICE_ENABLED: bool = False

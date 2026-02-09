@@ -190,8 +190,54 @@ async def payment_webhook(
         return await process_demo_webhook(data, db)
 
 
+# COMMENTED OUT - Old process_demo_webhook function (replaced below)
+# async def process_demo_webhook(data: dict, db: Session):
+#     """Process demo payment webhook"""
+#     
+#     order_uuid = data.get("order_uuid")
+#     payment_uuid = data.get("payment_uuid")
+#     status = data.get("status")
+#     
+#     if not order_uuid:
+#         raise HTTPException(status_code=400, detail="Missing order_uuid")
+#     
+#     # Find order
+#     order = db.query(Order).filter(Order.order_uuid == order_uuid).first()
+#     if not order:
+#         raise HTTPException(status_code=404, detail="Order not found")
+#     
+#     # Update order status
+#     if status == "success":
+#         order.status = "paid"
+#         
+#         # Update payment record
+#         payment = db.query(Payment).filter(Payment.order_uuid == order_uuid).first()
+#         if payment:
+#             payment.status = "success"
+#             payment.upi_txn_id = data.get("provider_reference")
+#         
+#         # Trigger n8n webhook if enabled
+#         if settings.N8N_ENABLED and settings.N8N_WEBHOOK_URL:
+#             await trigger_n8n_webhook(data)
+#     
+#     else:
+#         order.status = "payment_failed"
+#         
+#         payment = db.query(Payment).filter(Payment.order_uuid == order_uuid).first()
+#         if payment:
+#             payment.status = "failed"
+#     
+#     db.commit()
+#     
+#     return {
+#         "success": True,
+#         "message": "Webhook processed"
+#     }
+
+# NEW - Updated process_demo_webhook with DB commit BEFORE n8n trigger
 async def process_demo_webhook(data: dict, db: Session):
-    """Process demo payment webhook"""
+    """Process demo payment webhook and trigger n8n"""
+    from datetime import datetime
     
     order_uuid = data.get("order_uuid")
     payment_uuid = data.get("payment_uuid")
@@ -205,7 +251,7 @@ async def process_demo_webhook(data: dict, db: Session):
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
-    # Update order status
+    # Update order status FIRST
     if status == "success":
         order.status = "paid"
         
@@ -215,22 +261,36 @@ async def process_demo_webhook(data: dict, db: Session):
             payment.status = "success"
             payment.upi_txn_id = data.get("provider_reference")
         
-        # Trigger n8n webhook if enabled
+        # Commit to database BEFORE calling n8n (critical change!)
+        db.commit()
+        
+        # NOW trigger n8n workflow after DB is committed
         if settings.N8N_ENABLED and settings.N8N_WEBHOOK_URL:
-            await trigger_n8n_webhook(data)
+            # Prepare enhanced webhook payload
+            webhook_payload = {
+                "order_uuid": str(order_uuid),
+                "payment_uuid": str(payment_uuid) if payment_uuid else None,
+                "status": "success",
+                "amount": float(order.total_amount),
+                "timestamp": datetime.utcnow().isoformat(),
+                "user_uuid": str(order.user_uuid)
+            }
+            await trigger_n8n_webhook(webhook_payload)
     
     else:
+        # Payment failed
         order.status = "payment_failed"
         
         payment = db.query(Payment).filter(Payment.order_uuid == order_uuid).first()
         if payment:
             payment.status = "failed"
-    
-    db.commit()
+        
+        db.commit()
     
     return {
         "success": True,
-        "message": "Webhook processed"
+        "message": "Webhook processed",
+        "order_status": order.status
     }
 
 
@@ -268,13 +328,17 @@ async def process_razorpay_webhook(data: dict, db: Session):
         
         db.commit()
         
-        # Trigger n8n webhook if enabled
+        # Trigger n8n webhook if enabled (with enhanced payload)
         if settings.N8N_ENABLED and settings.N8N_WEBHOOK_URL:
+            from datetime import datetime
             await trigger_n8n_webhook({
                 "order_uuid": str(order_uuid),
+                "payment_uuid": str(payment.payment_uuid) if payment else None,
                 "payment_id": payment_id,
                 "status": "success",
-                "amount": payload.get("amount", 0) / 100
+                "amount": payload.get("amount", 0) / 100,
+                "timestamp": datetime.utcnow().isoformat(),
+                "user_uuid": str(order.user_uuid)
             })
         
         return {"success": True, "message": "Payment captured"}
@@ -302,17 +366,56 @@ async def process_razorpay_webhook(data: dict, db: Session):
     return {"success": True, "message": "Event processed"}
 
 
+# COMMENTED OUT - Old trigger_n8n_webhook function (replaced below)
+# async def trigger_n8n_webhook(data: dict):
+#     """Trigger n8n workflow via webhook"""
+#     try:
+#         async with httpx.AsyncClient() as client:
+#             await client.post(
+#                 settings.N8N_WEBHOOK_URL,
+#                 json=data,
+#                 timeout=10.0
+#             )
+#     except Exception as e:
+#         print(f"Failed to trigger n8n webhook: {e}")
+
+# NEW - Enhanced trigger_n8n_webhook with detailed logging and error handling
+from datetime import datetime
+
 async def trigger_n8n_webhook(data: dict):
-    """Trigger n8n workflow via webhook"""
+    """Trigger n8n workflow via webhook with detailed logging"""
     try:
+        print(f"🔔 Triggering n8n webhook for order {data.get('order_uuid')}")
+        print(f"📤 Sending to n8n: {settings.N8N_WEBHOOK_URL}")
+        print(f"📦 Payload: {data}")
+        
         async with httpx.AsyncClient() as client:
-            await client.post(
+            response = await client.post(
                 settings.N8N_WEBHOOK_URL,
-                json=data,
-                timeout=10.0
+                json=data,  # CRITICAL: Use json= not data=
+                headers={
+                    "Content-Type": "application/json"
+                },
+                timeout=30.0  # Increased timeout for n8n processing
             )
+            
+            print(f"✅ n8n response status: {response.status_code}")
+            print(f"✅ n8n response: {response.text}")
+            
+            if response.status_code == 200:
+                print(f"✅ n8n workflow triggered successfully")
+            else:
+                print(f"⚠️  n8n returned status {response.status_code}")
+                
+    except httpx.TimeoutException:
+        print(f"⚠️  n8n webhook timeout - workflow may still be processing")
+    except httpx.RequestError as e:
+        print(f"⚠️  n8n webhook request error: {e}")
     except Exception as e:
-        print(f"Failed to trigger n8n webhook: {e}")
+        print(f"⚠️  Unexpected n8n error: {e}")
+    
+    # IMPORTANT: Don't fail payment if n8n fails
+    # Payment already succeeded and committed to DB
 
 
 @router.post("/verify-razorpay")
@@ -355,12 +458,17 @@ async def verify_razorpay_payment(
     
     db.commit()
     
-    # Trigger n8n webhook if enabled
+    # Trigger n8n webhook if enabled (with enhanced payload)
     if settings.N8N_ENABLED and settings.N8N_WEBHOOK_URL:
+        from datetime import datetime
         await trigger_n8n_webhook({
             "order_uuid": str(payment.order_uuid),
+            "payment_uuid": str(payment.payment_uuid),
             "payment_id": request.razorpay_payment_id,
-            "status": "success"
+            "status": "success",
+            "amount": float(payment.amount),
+            "timestamp": datetime.utcnow().isoformat(),
+            "user_uuid": str(order.user_uuid) if order else None
         })
     
     return {
@@ -436,11 +544,16 @@ async def demo_complete_payment(
     
     db.commit()
     
-    # Trigger n8n webhook if enabled
+    # Trigger n8n webhook if enabled (with enhanced payload)
     if settings.N8N_ENABLED and settings.N8N_WEBHOOK_URL:
+        from datetime import datetime
         await trigger_n8n_webhook({
             "order_uuid": str(order_uuid),
-            "status": "success"
+            "payment_uuid": str(payment.payment_uuid) if payment else None,
+            "status": "success",
+            "amount": float(order.total_amount),
+            "timestamp": datetime.utcnow().isoformat(),
+            "user_uuid": str(order.user_uuid)
         })
     
     return {

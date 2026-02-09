@@ -11,28 +11,40 @@
       "id": "webhook-payment-success",
       "name": "Webhook - Payment Success",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [
         250,
         300
-      ]
+      ],
+      "webhookId": "payment-success-webhook"
     },
     {
       "parameters": {
         "conditions": {
-          "string": [
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
             {
-              "value1": "={{$json[\"status\"]}}",
-              "operation": "equal",
-              "value2": "success"
+              "id": "condition-1",
+              "leftValue": "={{ $json.body?.status || $json.status }}",
+              "rightValue": "success",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
       "id": "if-payment-success",
       "name": "IF Payment Success",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [
         450,
         300
@@ -41,47 +53,50 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE orders SET status = 'paid', updated_at = NOW() WHERE order_uuid = '{{$json[\"order_uuid\"]}}'",
+        "query": "UPDATE orders SET status = 'paid', updated_at = NOW() WHERE order_uuid = '{{ $json.body?.order_uuid || $json.order_uuid }}'::uuid RETURNING order_uuid::text",
         "options": {}
       },
       "id": "update-order-status",
       "name": "Update Order Status",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
+      "typeVersion": 2.4,
       "position": [
         650,
         200
       ],
       "credentials": {
         "postgres": {
-          "id": "1",
-          "name": "PostgreSQL account"
+          "id": "postgres-cred",
+          "name": "PostgreSQL"
         }
       }
     },
     {
       "parameters": {
-        "url": "http://localhost:8000/api/v1/exit-qr/generate",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\"order_uuid\": \"{{$json[\"order_uuid\"]}}\"}",
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/v1/exit-qr/internal/generate",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
+            {
+              "name": "X-Internal-Secret",
+              "value": "n8n-internal-secret-key"
+            },
             {
               "name": "Content-Type",
               "value": "application/json"
             }
           ]
         },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ order_uuid: $('Webhook - Payment Success').item.json.body?.order_uuid || $('Webhook - Payment Success').item.json.order_uuid }) }}",
         "options": {}
       },
       "id": "generate-exit-qr",
       "name": "Generate Exit QR",
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
+      "typeVersion": 4.2,
       "position": [
         850,
         200
@@ -90,70 +105,49 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE products p SET stock = stock - oi.quantity FROM order_items oi WHERE oi.order_uuid = '{{$json[\"order_uuid\"]}}' AND p.product_uuid = oi.product_uuid",
+        "query": "UPDATE products p SET stock = stock - oi.quantity FROM order_items oi WHERE oi.order_uuid = '{{ $('Webhook - Payment Success').item.json.body?.order_uuid || $('Webhook - Payment Success').item.json.order_uuid }}'::uuid AND p.product_uuid = oi.product_uuid",
         "options": {}
       },
       "id": "update-inventory",
       "name": "Update Inventory",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
+      "typeVersion": 2.4,
       "position": [
         1050,
         200
       ],
       "credentials": {
         "postgres": {
-          "id": "1",
-          "name": "PostgreSQL account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO analytics_events (event_type, event_data, created_at) VALUES ('payment_success', '{{JSON.stringify($json)}}', NOW())",
-        "options": {}
-      },
-      "id": "log-analytics",
-      "name": "Log Analytics Event",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [
-        1250,
-        200
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "1",
-          "name": "PostgreSQL account"
+          "id": "postgres-cred",
+          "name": "PostgreSQL"
         }
       }
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\"success\": true, \"message\": \"Payment processed successfully\"}",
+        "responseBody": "={{ JSON.stringify({ success: true, message: 'Payment processed and exit QR generated', order_uuid: $('Webhook - Payment Success').item.json.body?.order_uuid || $('Webhook - Payment Success').item.json.order_uuid }) }}",
         "options": {}
       },
       "id": "respond-success",
       "name": "Respond Success",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 1.1,
       "position": [
-        1450,
+        1250,
         200
       ]
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\"success\": false, \"message\": \"Payment was not successful\"}",
+        "responseBody": "={{ JSON.stringify({ success: false, message: 'Payment was not successful', received_data: $json }) }}",
         "options": {}
       },
       "id": "respond-failure",
       "name": "Respond Failure",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 1.1,
       "position": [
         650,
         400
@@ -216,17 +210,6 @@
       "main": [
         [
           {
-            "node": "Log Analytics Event",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Log Analytics Event": {
-      "main": [
-        [
-          {
             "node": "Respond Success",
             "type": "main",
             "index": 0
@@ -235,9 +218,16 @@
       ]
     }
   },
-  "active": true,
+  "pinData": {},
   "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
     "timezone": "Asia/Kolkata"
   },
-  "versionId": "2"
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-02-09T16:38:00.000Z",
+  "versionId": "7"
 }

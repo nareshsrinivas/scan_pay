@@ -28,3 +28,4 @@ pillow
 numpy
 python-multipart
 distutils-pytest
+ultralytics
